@@ -660,7 +660,7 @@ def Betti(x, t, beta, T_E, Cp_type, performance, v_w, v_aveg, random_phases):
     dx2dt, P_A = WindTurbine(omega_R, v_in, beta, T_E, t, Cp)
     dx2dt_fixed, P_A_fixed = WindTurbine_fixed(omega_R_fixed, v_w, beta, T_E, t, performance)
     dxdt = np.append(np.append(dx1dt, dx2dt), dx2dt_fixed)
-    
+
     return dxdt, h_wave, P_A, P_A_fixed
 
 
@@ -786,7 +786,7 @@ def rk4(Betti, x0, t0, tf, dt, beta_0, T_E, Cp_type, performance, v_w, v_wind, s
         h_waves.append(h_wave)
         P_A.append(power)
         P_fix.append(power_fixed)
-        
+        print((60 / (2*np.pi))*x[i, 6])
     
     x[:, 4] = -np.rad2deg(x[:, 4])
     x[:, 5] = -np.rad2deg(x[:, 5])
@@ -821,7 +821,7 @@ def rk4(Betti, x0, t0, tf, dt, beta_0, T_E, Cp_type, performance, v_w, v_wind, s
     return t_sub-t_sub[0], x_sub, v_wind_sub, wave_eta_sub, h_wave_sub, betas_sub, P_A_sub, P_fix_sub
 
 
-def main(end_time, v_w, x0, seeds, seed_wave, time_step = 0.05, Cp_type = 0):
+def main(end_time, v_w, x0, seeds, seed_wave, blade_pitch_angle, T_E, time_step = 0.05, Cp_type = 0):
     """
     Cp computation method
 
@@ -858,14 +858,14 @@ def main(end_time, v_w, x0, seeds, seed_wave, time_step = 0.05, Cp_type = 0):
     # modify this to change run time and step size
     #[Betti, x0 (initial condition), start time, end time, time step, beta, T_E]
 
-    t, x, v_wind, wave_eta, h_wave, betas, P_A_sub, P_fix_sub = rk4(Betti, x0, start_time, end_time, time_step, np.deg2rad(3.83), 43093.55, Cp_type, performance, v_w, v_wind, seed_wave)
+    t, x, v_wind, wave_eta, h_wave, betas, P_A_sub, P_fix_sub = rk4(Betti, x0, start_time, end_time, time_step, blade_pitch_angle, T_E, Cp_type, performance, v_w, v_wind, seed_wave)
 
     # return the output to be ploted
     return t, x, v_wind, wave_eta, h_wave, betas, P_A_sub, P_fix_sub
 
 
     
-def reproduce_save_driver(seeds, simulation_time, v_w):
+def reproduce_save_driver(seeds, simulation_time, v_w, blade_pitch_angle, T_E):
 
     end_time = simulation_time + 500 #end_time < 3000
     
@@ -881,7 +881,7 @@ def reproduce_save_driver(seeds, simulation_time, v_w):
                      -0.000391112846, 
                      1.26855822,
                      1.26855822])
-    t, x, v_wind, wave_eta, h_wave, betas, P_A, P_fix_sub = main(end_time, v_w, x0, seeds_wind, seed_wave)
+    t, x, v_wind, wave_eta, h_wave, betas, P_A, P_fix_sub = main(end_time, v_w, x0, seeds_wind, seed_wave, blade_pitch_angle, T_E)
     end_time -= 500
     
     np.savez(f'{seeds[0]}_{seeds[1]}_{seeds[2]}.npz', 
@@ -1046,44 +1046,56 @@ def load_data(seeds):
 
 seeds = [ -402337, -6699134,  7762480]
 
+# 12 m/s wind
+v_w = 12
+blade_pitch_angle = np.deg2rad(4.02)
+generator_torque = 43093.55
+
+#8 m/s wind
+#v_w = 8
+#blade_pitch_angle = 0
+#generator_torque = 18000
 
 
-
-t, x, wave_eta, P_A, P_fix_sub = reproduce_save_driver(seeds, 300, 8)
+t, x, wave_eta, P_A, P_fix_sub = reproduce_save_driver(seeds, 300, v_w, blade_pitch_angle, generator_torque)
 omega = x[:,6]
 omega_fix = x[:,7]
+mean_power = np.mean(P_A)
 
 plt.figure(figsize=(12, 10))
 
 # Plotting omega and omega_fixed vs. t
 plt.subplot(3, 1, 1)
-plt.plot(t, omega, label='Omega (ω)')
-plt.plot(t, omega_fix, label='Fixed Omega (ω_fixed)', linestyle='--')
-plt.title('Omega (ω) and Fixed Omega (ω_fixed) vs Time (t)')
-plt.xlabel('Time (t)')
-plt.ylabel('Omega (ω)')
-plt.legend()  # Adding legend to the plot
+plt.plot(t, omega, label='Floating')
+plt.plot(t, omega_fix, label='Fixed', linestyle='--')
+plt.title('Rotor Speed vs Time')
+plt.xlabel('Time (s)')
+plt.ylabel('Rotor Speed (rpm)')
+plt.legend()  
+plt.xlim(0, t[-1])
 plt.grid(True)
 
 # Plotting wave_eta vs. t
 plt.subplot(3, 1, 2)
-plt.plot(t, wave_eta, label='Wave Height (wave_eta)', color='green')
-plt.title('Wave Height (wave_eta) vs Time (t)')
-plt.xlabel('Time (t)')
-plt.ylabel('Wave Height (wave_eta)')
-plt.legend()  # Adding legend to the plot
+plt.plot(t, wave_eta, label='Wave Height', color='green')
+plt.title('Wave Height vs Time')
+plt.xlabel('Time (s)')
+plt.ylabel('Wave Height (m)')
+plt.xlim(0, t[-1])
 plt.grid(True)
 
 # Plotting P_A and P_fixed_sub vs. t
 plt.subplot(3, 1, 3)
-plt.plot(t, P_A, label='Power (P_A)', color='red')
-plt.plot(t, P_fix_sub, label='Fixed Power (P_fixed_sub)', color='blue', linestyle='--')
-plt.title('Power (P_A) and Fixed Power (P_fixed_sub) vs Time (t)')
-plt.xlabel('Time (t)')
-plt.ylabel('Power')
-plt.legend()  # Adding legend to the plot
+plt.plot(t, P_A, label=f'Floating average power {mean_power}', color='red')
+plt.plot(t, P_fix_sub, label=f'Fixed average power {P_fix_sub[-1]}', color='blue', linestyle='--')
+plt.title('Power vs Time (t)')
+plt.xlabel('Time (s)')
+plt.ylabel('Power (MW)')
+plt.legend() 
+plt.xlim(0, t[-1])
 plt.grid(True)
 
 # Adjust layout and show plot
 plt.tight_layout()
+plt.savefig(f'result/{v_w}m_per_s.png')
 plt.show()
